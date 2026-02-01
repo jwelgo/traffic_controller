@@ -52,8 +52,6 @@ void Button_InterruptHandler(uint16_t GPIO_Pin) {
         return;
     }
 
-    HAL_GPIO_TogglePin(LED_GPIO_PORT, LED_RED_PIN); //DEBUG Line
-
     uint32_t current_time = HAL_GetTick();
     
     if (current_time - last_press_time < BUTTON_DEBOUNCE_MS) {
@@ -62,7 +60,7 @@ void Button_InterruptHandler(uint16_t GPIO_Pin) {
     
     last_press_time = current_time;  //update last press time
     button_pressed_flag = true; //set flag for edge detection
-    
+
     if (button_callback != NULL) {
         button_callback();
     }  //callback if registered
