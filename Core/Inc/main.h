@@ -59,7 +59,18 @@ void Error_Handler(void);
 /* Private defines -----------------------------------------------------------*/
 
 /* USER CODE BEGIN Private defines */
+#define RGB_GPIO_PORT GPIOB
+#define RGB_RED_PIN GPIO_PIN_15
+#define RGB_GREEN_PIN GPIO_PIN_14
+#define RGB_BLUE_PIN GPIO_PIN_13
 
+#define LED_GPIO_PORT GPIOC
+#define LED_GREEN_PIN GPIO_PIN_1
+#define LED_RED_PIN GPIO_PIN_2
+#define LED_YELLOW_PIN GPIO_PIN_3
+
+#define BUTTON_GPIO_PORT GPIOB
+#define BUTTON_PIN GPIO_PIN_1
 /* USER CODE END Private defines */
 
 #ifdef __cplusplus
