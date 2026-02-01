@@ -18,7 +18,7 @@
                 "${workspaceFolder}/Drivers/CMSIS/Include"
             ],
             "defines": [
-                "STM32F303xC", 
+                "STM32F303xC",
                 "USE_HAL_DRIVER"
             ],
             "intelliSenseMode": "macos-clang-x64",

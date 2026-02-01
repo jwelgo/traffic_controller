@@ -9,10 +9,12 @@
 #include "main.h"
 
 
+/* Function to delay for warning crossers */
 void warning_delay() {
     HAL_Delay(CROSS_DELAY);
 }
 
+/* Function to delay for crossing */
 void walking_delay() {
     HAL_Delay(WALK_DELAY);
 }

@@ -23,6 +23,7 @@
 /* USER CODE BEGIN Includes */
 #include "stdbool.h"
 #include "crosssignal.h"
+#include "trafficlight.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -95,17 +96,23 @@ int main(void)
   while (1)
   {
     /* USER CODE BEGIN WHILE */
-    //normal light function
-
-    //if cross queued -> set cross_triggered true
+    LED_status_t lstatus = cycle_lights(&cross_triggered); //normal light function
+    if (lstatus != LED_OK) {
+        Error_Handler();  //lights sequence failed, shutdown junction
+    }
 
     if (cross_triggered) {
-      RGB_status_t status = service_crosswalk();
+      RGB_status_t rstatus = service_crosswalk();
 
-      if (status != RGB_OK) {
+      if (rstatus != RGB_OK) {
         Error_Handler();  //crosswalk sequence failed, shutdown junction
       }
     }
+    else {
+      HAL_Delay(5000); //wait 5 seconds for now
+    }
+
+    cross_triggered = false;
     /* USER CODE END WHILE */
   }
 
