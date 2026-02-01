@@ -1,7 +1,7 @@
 /* Library for traffic light signal
    
-   Signal uses three led
-   Signal uses red yellow and green lights
+   State machine based traffic light controller with non-blocking delays
+   and interrupt-driven crosswalk button support.
 */
 
 
@@ -10,42 +10,56 @@
 
 /* -- Includes -------------------------------------- */
 #include "stm32f3xx_hal.h"
-#include "stdbool.h"
+#include <stdbool.h>
 #include "main.h"
-
-
-/* -- Defines --------------------------------------- */
-#define GREEN_CYCLES 25     //time for cars to pass thru junction minus 5 (25 -> 30 seconds)
-#define YELLOW_CYCLES 5     //time for yellow light warning
-
-#define LED_RED_ON() HAL_GPIO_WritePin(LED_GPIO_PORT, LED_RED_PIN, GPIO_PIN_SET)
-#define LED_RED_OFF() HAL_GPIO_WritePin(LED_GPIO_PORT, LED_RED_PIN, GPIO_PIN_RESET)
-
-#define LED_YELLOW_ON() HAL_GPIO_WritePin(LED_GPIO_PORT, LED_YELLOW_PIN, GPIO_PIN_SET)
-#define LED_YELLOW_OFF() HAL_GPIO_WritePin(LED_GPIO_PORT, LED_YELLOW_PIN, GPIO_PIN_RESET)
-
-#define LED_GREEN_ON() HAL_GPIO_WritePin(LED_GPIO_PORT, LED_GREEN_PIN, GPIO_PIN_SET)
-#define LED_GREEN_OFF() HAL_GPIO_WritePin(LED_GPIO_PORT, LED_GREEN_PIN, GPIO_PIN_RESET)
 
 
 /* -- Type Defs ------------------------------------- */
 typedef enum {
-    LED_OK = 0,
-    LED_FATAL 
-} LED_status_t; 
+    STATE_GREEN,
+    STATE_YELLOW,
+    STATE_RED,
+    STATE_RED_CROSSWALK,
+    STATE_ERROR
+} TrafficState_t;
+
+typedef enum {
+    TRAFFIC_OK = 0,
+    TRAFFIC_ERROR 
+} TrafficStatus_t; 
 
 
 /* -- Function Prototypes --------------------------- */
-LED_status_t cycle_lights(volatile bool *cross_triggered);
-LED_status_t green_light(volatile bool *cross_triggered);
-LED_status_t yellow_light(volatile bool *cross_triggered);
+
+/**
+ * @brief Initialize traffic light controller
+ * @note Must be called before using the traffic light system
+ */
+void Traffic_Init(void);
+
+/**
+ * @brief Main state machine update - call this in main loop
+ * @note Non-blocking, processes state transitions
+ */
+void Traffic_Update(void);
+
+/**
+ * @brief Request a pedestrian crossing
+ * @note Call this from button interrupt or main loop
+ * @retval true if request accepted, false if already pending/active
+ */
+bool Traffic_RequestCrosswalk(void);
+
+/**
+ * @brief Get current traffic state
+ * @retval Current state
+ */
+TrafficState_t Traffic_GetState(void);
 
 
 /* -- Helper Fucntion Prototypes -------------------- */
-void toggle_red();
-void toggle_yellow();
-void toggle_green();
-void s_delay();
+void Traffic_SetLight(bool green, bool yellow, bool red);
+void Traffic_ChangeState(TrafficState_t new_state);
 
 
 #endif /* __CORE_INC_TRAFFICLIGHT_H */

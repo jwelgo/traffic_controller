@@ -215,4 +215,8 @@ void TIM1_UP_TIM16_IRQHandler(void)
 
 /* USER CODE BEGIN 1 */
 
+/* function handles EXTI line1 interrupt (Button) */
+void EXTI1_IRQHandler(void) {
+  HAL_GPIO_EXTI_IRQHandler(GPIO_PIN_1);
+}
 /* USER CODE END 1 */

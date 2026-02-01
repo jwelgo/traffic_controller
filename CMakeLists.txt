@@ -36,8 +36,13 @@ add_executable(${CMAKE_PROJECT_NAME}
     Core/Src/main.c
     Core/Src/stm32f3xx_it.c
     Core/Src/stm32f3xx_hal_msp.c
-    Core/Src/crosssignal.c     
-    Core/Src/trafficlight.c 
+    Core/Src/stm32f3xx_hal_timebase_tim.c
+    Core/Src/trafficlight.c
+    Core/Src/crosssignal.c
+    Core/Src/button.c      
+    Core/Src/sysmem.c
+    Core/Src/syscalls.c
+    startup_stm32f303xe.s
 )
 
 # Add STM32CubeMX generated sources

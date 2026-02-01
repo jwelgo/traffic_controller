@@ -1,7 +1,7 @@
-/* Library for cross walk signal
+/* Crosswalk Signal Controller
    
-   Signal uses RGB, but no PWM,
-   Signal only uses red and white light
+   Non-blocking crosswalk controller with walk/don't walk states
+   RGB LED shows white (walk) or red (don't walk/warning)
 */
 
 
@@ -10,42 +10,60 @@
 
 /* -- Includes -------------------------------------- */
 #include "stm32f3xx_hal.h"
+#include <stdbool.h>
 #include "main.h"
-
-
-/* -- Defines --------------------------------------- */
-#define WALK_DELAY 15000    //time for pedestrians to walk minus 10 (15000 -> 25 seconds)
-#define CROSS_DELAY 500     //rate at which the red light will blink
-#define N_WARNS 10          //give 10 secinds of warning for crossing
-
-#define RGB_RED_ON() HAL_GPIO_WritePin(RGB_GPIO_PORT, RGB_RED_PIN, GPIO_PIN_SET)
-#define RGB_RED_OFF() HAL_GPIO_WritePin(RGB_GPIO_PORT, RGB_RED_PIN, GPIO_PIN_RESET)
-
-#define RGB_GREEN_ON() HAL_GPIO_WritePin(RGB_GPIO_PORT, RGB_GREEN_PIN, GPIO_PIN_SET)
-#define RGB_GREEN_OFF() HAL_GPIO_WritePin(RGB_GPIO_PORT, RGB_GREEN_PIN, GPIO_PIN_RESET)
-
-#define RGB_BLUE_ON() HAL_GPIO_WritePin(RGB_GPIO_PORT, RGB_BLUE_PIN, GPIO_PIN_SET)
-#define RGB_BLUE_OFF() HAL_GPIO_WritePin(RGB_GPIO_PORT, RGB_BLUE_PIN, GPIO_PIN_RESET)
 
 
 /* -- Type Defs ------------------------------------- */
 typedef enum {
-    RGB_OK = 0,
-    RGB_FATAL 
-} RGB_status_t; 
+    CROSS_OFF,          
+    CROSS_WALK,        
+    CROSS_DONT_WALK     
+} CrosswalkLight_t;
+
+typedef enum {
+    CROSSWALK_IDLE,        
+    CROSSWALK_WALKING,      
+    CROSSWALK_WARNING,   
+    CROSSWALK_DONE         
+} CrosswalkState_t;
+
+typedef enum {
+    CROSSWALK_OK = 0,       
+    CROSSWALK_COMPLETE,     
+    CROSSWALK_ERROR        
+} CrosswalkStatus_t;
 
 
 /* -- Function Prototypes --------------------------- */
-RGB_status_t warn_pedestrian();
-RGB_status_t service_crosswalk();
 
+/**
+ * @brief Initialize crosswalk controller
+ */
+void Crosswalk_Init(void);
 
-/* -- Helper Fucntion Prototypes -------------------- */
-void warning_delay();
-void walking_delay();
-void set_white();
-void set_red();
-void reset_light();
+/**
+ * @brief Start crosswalk sequence (call when traffic light is red)
+ */
+void Crosswalk_Start(void);
+
+/**
+ * @brief Update crosswalk state machine (call continuously)
+ * @retval Status: OK (running), COMPLETE (done), or ERROR
+ */
+CrosswalkStatus_t Crosswalk_Update(void);
+
+/**
+ * @brief Set crosswalk light color
+ * @param light Color to display
+ */
+void Crosswalk_SetLight(CrosswalkLight_t light);
+
+/**
+ * @brief Get current crosswalk state
+ * @retval Current state
+ */
+CrosswalkState_t Crosswalk_GetState(void);
 
 
 #endif /* __CORE_INC_CROSSSIGNAL_H */

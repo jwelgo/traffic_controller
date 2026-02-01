@@ -1,109 +1,158 @@
-/* Library for traffic light signal
+/* Traffic Light Controller Implementation
    
-   Signal uses three led
-   Signal uses red yellow and green lights
+   State machine based traffic light with non-blocking operation
 */
 
-#include "stm32f3xx_hal.h"
+
+#include "crosssignal.h"
 #include "trafficlight.h"
 #include "main.h"
 
 
-void s_delay() {
-    HAL_Delay(1000);
+/* -- Private Variables ----------------------------- */
+static TrafficState_t current_state = STATE_GREEN;
+static uint32_t state_entry_time = 0;       //tmstp: entered current state
+static bool crosswalk_requested = false;    //pedestrian button pressed flag
+static bool crosswalk_active = false;       //currently servicing crosswalk
+
+
+/* -- Public Functions ------------------------------ */
+
+/* Initialize traffic controller */
+void Traffic_Init(void) {
+    current_state = STATE_GREEN;
+    state_entry_time = HAL_GetTick();
+    crosswalk_requested = false;
+    crosswalk_active = false;
+    
+    //set initial state -> GREEN
+    Traffic_SetLight(true, false, false);
+    Crosswalk_SetLight(CROSS_DONT_WALK);
 }
 
-/* Function to toggle green light */
-void toggle_green() {
-    GPIO_PinState greenState = HAL_GPIO_ReadPin(LED_GPIO_PORT, LED_GREEN_PIN);
 
-    if (greenState == GPIO_PIN_SET) {
-        LED_GREEN_OFF();
-    }
-    else {
-        LED_GREEN_ON();
+/* Main state machine - call continuously from main loop */
+void Traffic_Update(void) {
+    uint32_t current_time = HAL_GetTick();
+    uint32_t time_in_state = current_time - state_entry_time;
+    
+    switch (current_state) {
+
+        case STATE_GREEN:
+            if (time_in_state >= TRAFFIC_GREEN_TIME) {
+                Traffic_ChangeState(STATE_YELLOW);
+            }
+            else if (crosswalk_requested && time_in_state >= 10000) {
+                Traffic_ChangeState(STATE_YELLOW);
+            }
+            break;
+            
+        case STATE_YELLOW:
+            if (time_in_state >= TRAFFIC_YELLOW_TIME) {
+                if (crosswalk_requested) {
+                    Traffic_ChangeState(STATE_RED_CROSSWALK);
+                    crosswalk_requested = false;
+                } 
+                else {
+                    Traffic_ChangeState(STATE_RED);
+                }
+            }
+            break;
+            
+        case STATE_RED:
+            if (time_in_state >= TRAFFIC_RED_TIME) {
+                Traffic_ChangeState(STATE_GREEN);
+            }
+            break;
+            
+        case STATE_RED_CROSSWALK:
+            if (!crosswalk_active) {
+                crosswalk_active = true;
+                Crosswalk_Start();
+            } 
+            else {
+                CrosswalkStatus_t status = Crosswalk_Update();
+                
+                if (status == CROSSWALK_COMPLETE) {
+                    crosswalk_active = false;
+                    Traffic_ChangeState(STATE_GREEN);
+                } 
+                else if (status == CROSSWALK_ERROR) {
+                    Traffic_ChangeState(STATE_ERROR);
+                }
+            }
+            break;
+            
+        case STATE_ERROR:
+            Error_Handler();
+            break;
+            
+        default:
+            Traffic_ChangeState(STATE_ERROR);
+            break;
     }
 }
 
-/* Function to toggle yellow light */
-void toggle_yellow() {
-    GPIO_PinState yellowState = HAL_GPIO_ReadPin(LED_GPIO_PORT, LED_YELLOW_PIN);
 
-    if (yellowState == GPIO_PIN_SET) {
-        LED_YELLOW_OFF();
-    }
-    else {
-        LED_YELLOW_ON();
+/* Request pedestrian crossing: true if accepted, false if already active/pending */
+bool Traffic_RequestCrosswalk(void) {
+    if (crosswalk_requested || crosswalk_active) {
+        return false;
+    } //don't accept if already requested or currently crossing
+    
+    if (current_state == STATE_GREEN || current_state == STATE_YELLOW) {
+        crosswalk_requested = true;
+        return true;
+    } //only accept during green or yellow (not during red)
+    
+    return false;
+}
+
+
+/* Get current traffic state */
+TrafficState_t Traffic_GetState(void) {
+    return current_state;
+}
+
+
+/* -- Internal Helper Functions --------------------- */
+
+/* Change traffic light state, new_state is state to transition to */
+void Traffic_ChangeState(TrafficState_t new_state) {
+    current_state = new_state;
+    state_entry_time = HAL_GetTick();
+    
+    //set hardware outputs based on new state
+    switch (new_state) {
+        case STATE_GREEN:
+            Traffic_SetLight(true, false, false);   //GREEN ON
+            break;
+            
+        case STATE_YELLOW:
+            Traffic_SetLight(false, true, false);   //YELLOW ON
+            break;
+            
+        case STATE_RED:
+        case STATE_RED_CROSSWALK:
+            Traffic_SetLight(false, false, true);   //RED ON
+            break;
+            
+        case STATE_ERROR:
+            break;
+            
+        default:
+            break;
     }
 }
 
-/* Function to toggle red light */
-void toggle_red() {
-    GPIO_PinState redState = HAL_GPIO_ReadPin(LED_GPIO_PORT, LED_RED_PIN);
 
-    if (redState == GPIO_PIN_SET) {
-        LED_RED_OFF();
-    }
-    else {
-        LED_RED_ON();
-    }
-}
-
-/* Function to carry out the green light */
-LED_status_t green_light(volatile bool *cross_triggered) {
-    toggle_green(); 
-
-    for (int i = 0; i < GREEN_CYCLES; i++) {
-        GPIO_PinState button = HAL_GPIO_ReadPin(BUTTON_GPIO_PORT, BUTTON_PIN);
-        
-        if (button == GPIO_PIN_SET) {
-            *cross_triggered = true;
-        }
-
-        s_delay();
-    } 
-
-    toggle_green();
-
-    return LED_OK;
-}
-
-/* Function carry out the yellow light */
-LED_status_t yellow_light(volatile bool *cross_triggered) {
-    toggle_yellow(); 
-
-    for (int i = 0; i < YELLOW_CYCLES; i++) {
-        GPIO_PinState button = HAL_GPIO_ReadPin(BUTTON_GPIO_PORT, BUTTON_PIN);
-        
-        if (button == GPIO_PIN_SET) {
-            *cross_triggered = true;
-        }
-
-        s_delay();
-    } 
-
-    toggle_yellow();
-
-    return LED_OK;
-}
-
-/* Logical sequence to service cars thru junction */
-LED_status_t cycle_lights(volatile bool *cross_triggered) {
-    LED_RED_OFF();
-    LED_YELLOW_OFF();
-    LED_RED_OFF();
-
-    LED_status_t green_status = green_light(cross_triggered);
-    if (green_status != LED_OK) {
-        return LED_FATAL;
-    }
-
-    LED_status_t yellow_status = yellow_light(cross_triggered);
-    if (yellow_status != LED_OK) {
-        return LED_FATAL;
-    }
-
-    toggle_red();
-
-    return LED_OK;
+/** Set traffic light hardware outputs
+ * green true -> green LED on
+ * yellow true -> yellow LED on  
+ * red true -> red LED on
+ */
+void Traffic_SetLight(bool green, bool yellow, bool red) {
+    HAL_GPIO_WritePin(LED_GPIO_PORT, LED_GREEN_PIN, green ? GPIO_PIN_SET : GPIO_PIN_RESET);
+    HAL_GPIO_WritePin(LED_GPIO_PORT, LED_YELLOW_PIN, yellow ? GPIO_PIN_SET : GPIO_PIN_RESET);
+    HAL_GPIO_WritePin(LED_GPIO_PORT, LED_RED_PIN, red ? GPIO_PIN_SET : GPIO_PIN_RESET);
 }

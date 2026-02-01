@@ -21,7 +21,7 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-#include "stdbool.h"
+#include "button.h"
 #include "crosssignal.h"
 #include "trafficlight.h"
 /* USER CODE END Includes */
@@ -44,19 +44,36 @@
 /* Private variables ---------------------------------------------------------*/
 
 /* USER CODE BEGIN PV */
-volatile bool cross_triggered;
+
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
 void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
 /* USER CODE BEGIN PFP */
-
+static void Button_PressCallback(void);
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
 
+/**
+ * @brief Callback when button is pressed
+ * @note Called from interrupt context
+ */
+static void Button_PressCallback(void) {
+  Traffic_RequestCrosswalk(); //request crosswalk
+}
+
+/**
+ * @brief GPIO EXTI Callback
+ * @param GPIO_Pin Pin that triggered interrupt
+ */
+void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
+{
+  // Forward to button handler
+  Button_InterruptHandler(GPIO_Pin);
+}
 /* USER CODE END 0 */
 
 /**
@@ -67,7 +84,7 @@ int main(void)
 {
 
   /* USER CODE BEGIN 1 */
-  cross_triggered = false;
+
   /* USER CODE END 1 */
 
   /* MCU Configuration--------------------------------------------------------*/
@@ -89,30 +106,17 @@ int main(void)
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
   /* USER CODE BEGIN 2 */
-
+  // Initialize all subsystems
+  Traffic_Init();
+  Crosswalk_Init();
+  Button_Init(Button_PressCallback);
   /* USER CODE END 2 */
 
   /* Infinite loop */
   while (1)
   {
     /* USER CODE BEGIN WHILE */
-    LED_status_t lstatus = cycle_lights(&cross_triggered); //normal light function
-    if (lstatus != LED_OK) {
-        Error_Handler();  //lights sequence failed, shutdown junction
-    }
-
-    if (cross_triggered) {
-      RGB_status_t rstatus = service_crosswalk();
-
-      if (rstatus != RGB_OK) {
-        Error_Handler();  //crosswalk sequence failed, shutdown junction
-      }
-    }
-    else {
-      HAL_Delay(5000); //wait 5 seconds for now
-    }
-
-    cross_triggered = false;
+    Traffic_Update();
     /* USER CODE END WHILE */
   }
 
@@ -193,7 +197,7 @@ static void MX_GPIO_Init(void)
 
   /*Configure GPIO pin : PB1 */
   GPIO_InitStruct.Pin = GPIO_PIN_1;
-  GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
+  GPIO_InitStruct.Mode = GPIO_MODE_IT_RISING;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
 
@@ -205,7 +209,8 @@ static void MX_GPIO_Init(void)
   HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
 
   /* USER CODE BEGIN MX_GPIO_Init_2 */
-
+  HAL_NVIC_SetPriority(EXTI1_IRQn, 2, 0);
+  HAL_NVIC_EnableIRQ(EXTI1_IRQn);
   /* USER CODE END MX_GPIO_Init_2 */
 }
 
@@ -243,22 +248,20 @@ void Error_Handler(void)
 {
   /* USER CODE BEGIN Error_Handler_Debug */
   /* Reset all GPIO */
-  HAL_GPIO_WritePin(RGB_GPIO_PORT, RGB_RED_PIN, GPIO_PIN_RESET);
-  HAL_GPIO_WritePin(RGB_GPIO_PORT, RGB_GREEN_PIN, GPIO_PIN_RESET);
-  HAL_GPIO_WritePin(RGB_GPIO_PORT, RGB_BLUE_PIN, GPIO_PIN_RESET);
-  HAL_GPIO_WritePin(LED_GPIO_PORT, LED_RED_PIN, GPIO_PIN_RESET);
-  HAL_GPIO_WritePin(LED_GPIO_PORT, LED_YELLOW_PIN, GPIO_PIN_RESET);
-  HAL_GPIO_WritePin(LED_GPIO_PORT, LED_GREEN_PIN, GPIO_PIN_RESET);
-
-  /* Write Both lights to blink red */
-  HAL_GPIO_TogglePin(RGB_GPIO_PORT, RGB_RED_PIN);
-  HAL_GPIO_TogglePin(LED_GPIO_PORT, LED_RED_PIN);
+  HAL_GPIO_WritePin(RGB_GPIO_PORT, RGB_RED_PIN | RGB_GREEN_PIN | RGB_BLUE_PIN, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(LED_GPIO_PORT, LED_RED_PIN | LED_YELLOW_PIN | LED_GREEN_PIN, GPIO_PIN_RESET);
 
   /* User can add his own implementation to report the HAL error return state */
   __disable_irq();
   while (1)
   {
-    __NOP();
+    /* Write Both lights to blink red */
+    HAL_GPIO_TogglePin(RGB_GPIO_PORT, RGB_RED_PIN);
+    HAL_GPIO_TogglePin(LED_GPIO_PORT, LED_RED_PIN);
+
+    for (volatile uint32_t i = 0; i < 1000000; i++) {
+      __NOP();
+    }
   }
   /* USER CODE END Error_Handler_Debug */
 }

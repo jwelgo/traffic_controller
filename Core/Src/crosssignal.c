@@ -1,70 +1,116 @@
-/* Library for cross walk signal
+/* Crosswalk Signal Implementation
    
-   Signal uses RGB, but no PWM,
-   Signal only uses red and white light
+   Non-blocking crosswalk controller
 */
 
-#include "stm32f3xx_hal.h"
 #include "crosssignal.h"
 #include "main.h"
 
 
-/* Function to delay for warning crossers */
-void warning_delay() {
-    HAL_Delay(CROSS_DELAY);
+/* -- Private Variables ----------------------------- */
+static CrosswalkState_t current_state = CROSSWALK_IDLE;
+static uint32_t state_entry_time = 0;
+static uint32_t last_blink_time = 0;
+static bool blink_on = false;
+
+
+/* -- Public Functions ------------------------------ */
+
+/* Initialize crosswalk */
+void Crosswalk_Init(void) {
+    current_state = CROSSWALK_IDLE;
+    state_entry_time = 0;
+    last_blink_time = 0;
+    blink_on = false;
+    
+    Crosswalk_SetLight(CROSS_DONT_WALK); 
 }
 
-/* Function to delay for crossing */
-void walking_delay() {
-    HAL_Delay(WALK_DELAY);
+
+/* Start crosswalk sequence */
+void Crosswalk_Start(void) {
+    current_state = CROSSWALK_WALKING;
+    state_entry_time = HAL_GetTick();
+    last_blink_time = 0;
+    blink_on = false;
+    
+    Crosswalk_SetLight(CROSS_WALK);  
 }
 
-/* Function to set white light */
-void set_white() {
-    RGB_RED_ON();
-    RGB_GREEN_ON();
-    RGB_BLUE_ON();
-}
 
-/* Function to set red light */
-void set_red() {
-    RGB_RED_ON();
-    RGB_GREEN_OFF();
-    RGB_BLUE_OFF();
-}
-
-/* Function to reset the crosswalk light */
-void reset_light() {
-    RGB_RED_OFF();
-    RGB_GREEN_OFF();
-    RGB_BLUE_OFF();
-}
-
-/* Function to warn pedestrian light will turn red */
-RGB_status_t warn_pedestrian() {
-    set_red();
-
-    for (int i = 0; i < N_WARNS; i++) {
-        warning_delay();
-        reset_light();
-        warning_delay();
-        set_red();  
-    }  //loop blinks red light to warn pedestrian
-
-    return RGB_OK;
-}
-
-/* Logical sequence to service pedestrian walk */
-RGB_status_t service_crosswalk() {
-    reset_light();
-    set_white();
-
-    walking_delay();    //delays infinite loop to let pedestrian walk
-
-    RGB_status_t status = warn_pedestrian(); //delays infinite loop to warn pedestrian
-    if (status != RGB_OK) {
-        return RGB_FATAL;
+/* Update crosswalk state machine */
+CrosswalkStatus_t Crosswalk_Update(void) {
+    uint32_t current_time = HAL_GetTick();
+    uint32_t time_in_state = current_time - state_entry_time;
+    
+    switch (current_state) {
+        case CROSSWALK_IDLE:
+            return CROSSWALK_OK;
+            
+        case CROSSWALK_WALKING:
+            if (time_in_state >= CROSSWALK_WALK_TIME) {
+                current_state = CROSSWALK_WARNING;
+                state_entry_time = HAL_GetTick();
+                last_blink_time = state_entry_time;
+                blink_on = true;
+                Crosswalk_SetLight(CROSS_DONT_WALK);  
+            }
+            return CROSSWALK_OK;
+            
+        case CROSSWALK_WARNING:
+            if (current_time - last_blink_time >= CROSSWALK_BLINK_RATE) {
+                last_blink_time = current_time;
+                blink_on = !blink_on;
+                
+                if (blink_on) {
+                    Crosswalk_SetLight(CROSS_DONT_WALK);  // RED ON
+                } else {
+                    Crosswalk_SetLight(CROSS_OFF);        // ALL OFF
+                }
+            }
+            
+            if (time_in_state >= CROSSWALK_WARNING_TIME) {
+                current_state = CROSSWALK_DONE;
+                Crosswalk_SetLight(CROSS_DONT_WALK);  
+                return CROSSWALK_COMPLETE;
+            }
+            return CROSSWALK_OK;
+            
+        case CROSSWALK_DONE:
+            current_state = CROSSWALK_IDLE;
+            return CROSSWALK_COMPLETE;
+            
+        default:
+            return CROSSWALK_ERROR;
     }
+}
 
-    return RGB_OK;
+
+/* Set crosswalk RGB LED color */
+void Crosswalk_SetLight(CrosswalkLight_t light) {
+    switch (light) {
+        case CROSS_OFF: //ALL OFF
+            HAL_GPIO_WritePin(RGB_GPIO_PORT, RGB_RED_PIN, GPIO_PIN_RESET);
+            HAL_GPIO_WritePin(RGB_GPIO_PORT, RGB_GREEN_PIN, GPIO_PIN_RESET);
+            HAL_GPIO_WritePin(RGB_GPIO_PORT, RGB_BLUE_PIN, GPIO_PIN_RESET);
+            break;
+            
+        case CROSS_WALK: //WHITE LIGHT
+            HAL_GPIO_WritePin(RGB_GPIO_PORT, RGB_RED_PIN, GPIO_PIN_SET);
+            HAL_GPIO_WritePin(RGB_GPIO_PORT, RGB_GREEN_PIN, GPIO_PIN_SET);
+            HAL_GPIO_WritePin(RGB_GPIO_PORT, RGB_BLUE_PIN, GPIO_PIN_SET);
+            break;
+            
+        case CROSS_DONT_WALK: //RED LIGHT
+            HAL_GPIO_WritePin(RGB_GPIO_PORT, RGB_RED_PIN, GPIO_PIN_SET);
+            HAL_GPIO_WritePin(RGB_GPIO_PORT, RGB_GREEN_PIN, GPIO_PIN_RESET);
+            HAL_GPIO_WritePin(RGB_GPIO_PORT, RGB_BLUE_PIN, GPIO_PIN_RESET);
+            break;
+    }
+}
+
+
+/* Get current crosswalk state */
+CrosswalkState_t Crosswalk_GetState(void) {
+    return current_state;
 }
